@@ -3,177 +3,10 @@ import java.util.Scanner;
 
 public class TestJDBC
 {
-    private static void printSQLExceptions(SQLException ex) 
-    {                
-        while (ex != null) 
-        {           
-            System.err.println("\n" + ex.getClass().getName() + ":\n");
-            System.err.println("SQLState: " + ex.getSQLState());
-            System.err.println("Error code: " + ex.getErrorCode());
-            System.err.println("Message: " + ex.getMessage());
-
-            Throwable t = ex.getCause();
-            while (t != null) 
-            {
-              System.err.println("Caused by: " + t);
-              t = t.getCause();
-            }
-
-            System.err.println();
-            ex = ex.getNextException();           
-        }        
-    }
+    private static final int DISPLAY_MAX = 50; // Arbitrary limit on column width to display.
+    private static final int DISPLAY_FORMAT_EXTRA = 3; // Per column extra display bytes ( <data> |).
+    private static final int NULL_SIZE = 6; // <NULL>.
     
-    private static void printSQLWarnings(SQLWarning warning) 
-    {
-        while (warning != null) 
-        {
-            System.err.println("\n" + warning.getClass().getName() + ":\n");
-            System.err.println("SQLState: " + warning.getSQLState());
-            System.err.println("Error code: " + warning.getErrorCode());
-            System.err.println("Message: " + warning.getMessage());
-
-            Throwable t = warning.getCause();
-            while (t != null) 
-            {
-              System.err.println("Caused by: " + t);
-              t = t.getCause();
-            }
-
-            System.err.println();
-            warning = warning.getNextWarning();
-        }        
-    }
-    
-    private static void displayResults(ResultSet rs) throws SQLException 
-    {
-        System.out.println();
-        
-        ResultSetMetaData rsmd = rs.getMetaData();
-
-        int columnsNumber = rsmd.getColumnCount();
-
-        /* Loop to get all the column labels. */
-        for (int i = 1; i <= columnsNumber; i++) 
-        {
-            System.out.printf("%20.20s|", rsmd.getColumnLabel(i));  
-        }
-        System.out.println();
-
-        /* Print a separator bar for the column labels. */
-        for (int i = 1; i <= columnsNumber; i++) 
-        {
-            for (int j = 1; j <= 20; j++) 
-            {
-                System.out.print("-");
-            }
-            System.out.print("|");
-        }
-        System.out.println();
-
-        /* Loop through the ResultSet to fetch data. */
-        int rowCount = 0;
-        while (rs.next()) 
-        {
-            for (int i = 1; i <= columnsNumber; i++) 
-            {
-                String value = rs.getString(i);               
-                System.out.printf("%20.20s|", rs.wasNull() ? "<NULL>" : value);                                    
-            }
-            System.out.println();
-            rowCount++;
-        }
-        System.out.println("\n" + rowCount + " row(s) returned.\n");        
-    }
-    
-    public static void processStatements(Scanner sc, DatabaseMetaData dbm, Statement stmt)
-    {
-        System.out.println("Enter SQL commands.\n"
-                + "Type 'tables' to list the tables.\n"
-                + "Type 'columns <table>' to list the columns of <table>.\n"
-                + "Type 'quit' to quit.\n");
-
-        ResultSet rs = null;
-
-        System.out.print("SQL> ");
-        while (sc.hasNext()) 
-        {                
-            try
-            {
-                String statementString = sc.nextLine();       
-                
-                if (statementString.startsWith("tables"))
-                {
-                    /* Get the tables in the database. */
-                    rs = dbm.getTables(null, null, null, null);
-                    displayResults(rs);                          
-                }
-                else if (statementString.startsWith("columns"))
-                {
-                    String[] words = statementString.split("\\s+");
-                    
-                    /* Get the columns in all tables in the database. */
-                    rs = dbm.getColumns(null, null, words[1], null);
-                    displayResults(rs);                    
-                }
-                else if (statementString.startsWith("quit"))
-                {
-                    break;
-                }
-                else
-                {   
-                    /* Execute the query. */
-                    boolean hasResultSet = stmt.execute(statementString);
-                    printSQLWarnings(stmt.getWarnings());
-                    
-                    if (hasResultSet) 
-                    {
-                        rs = stmt.getResultSet();
-                        displayResults(rs);                    
-                    } 
-                    else 
-                    {
-                        int rowCount = stmt.getUpdateCount();
-                        System.out.println("\n" + rowCount + " row(s) affected.\n");
-                    }                    
-                }
-            } 
-            catch (SQLException ex)
-            {
-                printSQLExceptions(ex);
-            }
-            catch (ArrayIndexOutOfBoundsException ex)
-            {
-                System.err.println("<table> was not given.");
-            }
-            catch (Exception ex) 
-            {
-                ex.printStackTrace();
-            }
-            finally
-            {
-                /* Perform clean up. */            
-                try 
-                {
-                    if (rs != null) 
-                    {
-                        rs.close();
-                    }
-                } 
-                catch (SQLException ex) 
-                {
-                    printSQLExceptions(ex);                       
-                }   
-            }
-            
-            System.out.print("SQL> ");
-        }                      
-    }
-    
-    /**
-     * Implement the application.
-     * @param args The command-line arguments.
-     */
     public static void main(String[] args)
     {
         String databaseURL = null;
@@ -243,5 +76,182 @@ public class TestJDBC
                 printSQLExceptions(ex);                                       
             }
         }   
+    }
+    
+    private static void processStatements(Scanner sc, DatabaseMetaData dbm, Statement stmt)
+    {
+        System.out.printf("Enter SQL commands.%n"
+                + "Type 'tables' to list the tables.%n"
+                + "Type 'columns <table>' to list the columns of <table>.%n"
+                + "Type 'quit' to quit.%n%n");
+
+        ResultSet rs = null;
+
+        System.out.print("SQL> ");
+        while (sc.hasNext()) 
+        {                
+            try
+            {
+                String statementString = sc.nextLine();       
+                
+                if (statementString.startsWith("tables"))
+                {
+                    /* Get the tables in the database. */
+                    rs = dbm.getTables(null, null, null, null);
+                    printSQLWarnings(dbm.getConnection().getWarnings());
+                    
+                    displayResults(rs);                          
+                }
+                else if (statementString.startsWith("columns"))
+                {
+                    String[] words = statementString.split("\\s+");
+                    
+                    /* Get the columns in all tables in the database. */
+                    rs = dbm.getColumns(null, null, words[1], null);
+                    printSQLWarnings(dbm.getConnection().getWarnings());
+                    
+                    displayResults(rs);                    
+                }
+                else if (statementString.startsWith("quit"))
+                {
+                    break;
+                }
+                else
+                {   
+                    /* Execute the query. */
+                    boolean hasResultSet = stmt.execute(statementString);
+                    printSQLWarnings(stmt.getWarnings());
+                    
+                    if (hasResultSet) 
+                    {
+                        rs = stmt.getResultSet();
+                        displayResults(rs);                    
+                    } 
+                    else 
+                    {
+                        int rowCount = stmt.getUpdateCount();
+                        System.out.printf("%n" + rowCount + " row(s) affected.%n%n");
+                    }                    
+                }
+            } 
+            catch (SQLException ex)
+            {
+                printSQLExceptions(ex);
+            }
+            catch (Exception ex) 
+            {
+                ex.printStackTrace();
+                System.err.println();
+            }
+            finally
+            {
+                /* Perform clean up. */            
+                try 
+                {
+                    if (rs != null) 
+                    {
+                        rs.close();
+                    }
+                } 
+                catch (SQLException ex) 
+                {
+                    printSQLExceptions(ex);                       
+                }   
+            }
+            
+            System.out.print("SQL> ");
+        }                      
+    }
+    
+    private static void displayResults(ResultSet rs) throws SQLException 
+    {
+        System.out.println();
+        
+        ResultSetMetaData rsmd = rs.getMetaData();
+
+        int columnCount = rsmd.getColumnCount();
+
+        int[] displaySize = new int[columnCount];
+        boolean[] isChar = new boolean[columnCount];
+        
+        /* Loop to get all the column labels. */
+        for (int i = 0; i < columnCount; i++) 
+        {
+            int columnDisplaySize = rsmd.getColumnDisplaySize(i + 1);
+            String columnLabel = rsmd.getColumnLabel(i + 1);
+            
+            displaySize[i] = Math.max(columnDisplaySize, NULL_SIZE);
+            displaySize[i] = Math.max(displaySize[i], columnLabel.length());
+            displaySize[i] = Math.min(displaySize[i], DISPLAY_MAX);
+            
+            int columnType = rsmd.getColumnType(i + 1);
+            isChar[i] = columnType == Types.CHAR
+                    || columnType == Types.VARCHAR
+                    || columnType == Types.LONGVARCHAR;
+            
+            System.out.printf(" %-" + displaySize[i] + "." + displaySize[i] + "s |", columnLabel);  
+        }
+        System.out.println();
+
+        /* Print a separator bar for the column labels. */
+        for (int i = 0; i < columnCount; i++) 
+        {
+            for (int j = 0; j < displaySize[i] + DISPLAY_FORMAT_EXTRA - 1; j++) 
+            {
+                System.out.print("-");
+            }
+            System.out.print("|");
+        }
+        System.out.println();
+
+        /* Loop through the ResultSet to fetch data. */
+        int rowCount = 0;
+        while (rs.next()) 
+        {
+            for (int i = 0; i < columnCount; i++) 
+            {
+                String value = rs.getString(i + 1);
+                
+                if (rs.wasNull())
+                {
+                    System.out.printf(" %" + (isChar[i] ? "-" : "") + displaySize[i] + "." 
+                            + displaySize[i] + "s |", "<NULL>");
+                }
+                else
+                {
+                    System.out.printf(" %" + (isChar[i] ? "-" : "") + displaySize[i] + "." 
+                            + displaySize[i] + "s |", value);
+                }
+            }
+            System.out.println();
+            rowCount++;
+        }
+        System.out.printf("%n" + rowCount + " row(s) returned.%n%n");        
+    }
+    
+    private static void printSQLExceptions(SQLException ex) 
+    {           
+        while (ex != null) 
+        {           
+            System.err.print("[SQLState: " + ex.getSQLState() + "]");
+            System.err.println("[Error code: " + ex.getErrorCode() + "]");
+            ex.printStackTrace();
+            System.err.println();
+            
+            ex = ex.getNextException();           
+        } 
+    }
+    
+    private static void printSQLWarnings(SQLWarning warning) 
+    {
+        while (warning != null) 
+        {
+            System.err.print("[SQLState: " + warning.getSQLState() + "]");
+            System.err.println("[Error code: " + warning.getErrorCode() + "]");
+            warning.printStackTrace();
+            System.err.println();
+            
+            warning = warning.getNextWarning();
+        }        
     }
 }
